@@ -182,6 +182,7 @@ PY_O_BASENAME = \
 	objset.o \
 	objsingleton.o \
 	objslice.o \
+	objstar.o \
 	objstr.o \
 	objstrunicode.o \
 	objstringio.o \

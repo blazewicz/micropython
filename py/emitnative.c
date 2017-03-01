@@ -99,6 +99,7 @@ STATIC byte mp_f_n_args[MP_F_NUMBER_OF] = {
     [MP_F_OBJ_IS_TRUE] = 1,
     [MP_F_UNARY_OP] = 2,
     [MP_F_BINARY_OP] = 3,
+    [MP_F_BUILD_STAR] = 1,
     [MP_F_BUILD_TUPLE] = 2,
     [MP_F_BUILD_LIST] = 2,
     [MP_F_LIST_APPEND] = 2,
@@ -2005,6 +2006,13 @@ STATIC void emit_native_binary_op(emit_t *emit, mp_binary_op_t op) {
     }
 }
 
+STATIC void emit_native_build_star(emit_t *emit) {
+    emit_native_pre(emit);
+    emit_get_stack_pointer_to_reg_for_pop(emit, REG_ARG_2, 1); // pointer to wrapped item
+    emit_call_with_imm_arg(emit, MP_F_BUILD_STAR, 1, REG_ARG_1);
+    emit_post_push_reg(emit, VTYPE_PYOBJ, REG_RET); // new star
+}
+
 STATIC void emit_native_build_tuple(emit_t *emit, mp_uint_t n_args) {
     // for viper: call runtime, with types of args
     //   if wrapped in byte_array, or something, allocates memory and fills it
@@ -2344,6 +2352,7 @@ const emit_method_table_t EXPORT_FUN(method_table) = {
     emit_native_pop_except,
     emit_native_unary_op,
     emit_native_binary_op,
+    emit_native_build_star,
     emit_native_build_tuple,
     emit_native_build_list,
     emit_native_build_map,

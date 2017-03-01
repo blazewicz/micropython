@@ -790,6 +790,13 @@ unwind_jump:;
                     POP_EXC_BLOCK();
                     DISPATCH();
 
+                ENTRY(MP_BC_BUILD_STAR): {
+                    MARK_EXC_IP_SELECTIVE();
+                    mp_obj_t arg = POP();
+                    PUSH(mp_obj_new_star(arg));
+                    DISPATCH();
+                }
+
                 ENTRY(MP_BC_BUILD_TUPLE): {
                     MARK_EXC_IP_SELECTIVE();
                     DECODE_UINT;
@@ -919,30 +926,7 @@ unwind_jump:;
                     DECODE_UINT;
                     // unum & 0xff == n_positional
                     // (unum >> 8) & 0xff == n_keyword
-                    sp -= (unum & 0xff) + ((unum >> 7) & 0x1fe);
-                    #if MICROPY_STACKLESS
-                    if (mp_obj_get_type(*sp) == &mp_type_fun_bc) {
-                        code_state->ip = ip;
-                        code_state->sp = sp;
-                        code_state->exc_sp = MP_TAGPTR_MAKE(exc_sp, currently_in_except_block);
-                        mp_code_state_t *new_state = mp_obj_fun_bc_prepare_codestate(*sp, unum & 0xff, (unum >> 8) & 0xff, sp + 1);
-                        if (new_state) {
-                            new_state->prev = code_state;
-                            code_state = new_state;
-                            nlr_pop();
-                            goto run_code_state;
-                        }
-                        #if MICROPY_STACKLESS_STRICT
-                        else {
-                        deep_recursion_error:
-                            mp_raise_recursion_depth();
-                        }
-                        #else
-                        // If we couldn't allocate codestate on heap, in
-                        // non non-strict case fall thru to stack allocation.
-                        #endif
-                    }
-                    #endif
+                    sp -= (unum & 0xff) + ((unum >> 8) & 0xff);
                     SET_TOP(mp_call_function_n_kw(*sp, unum & 0xff, (unum >> 8) & 0xff, sp + 1));
                     DISPATCH();
                 }
@@ -952,41 +936,9 @@ unwind_jump:;
                     DECODE_UINT;
                     // unum & 0xff == n_positional
                     // (unum >> 8) & 0xff == n_keyword
-                    // We have following stack layout here:
-                    // fun arg0 arg1 ... kw0 val0 kw1 val1 ... seq dict <- TOS
-                    sp -= (unum & 0xff) + ((unum >> 7) & 0x1fe) + 2;
-                    #if MICROPY_STACKLESS
-                    if (mp_obj_get_type(*sp) == &mp_type_fun_bc) {
-                        code_state->ip = ip;
-                        code_state->sp = sp;
-                        code_state->exc_sp = MP_TAGPTR_MAKE(exc_sp, currently_in_except_block);
-
-                        mp_call_args_t out_args;
-                        mp_call_prepare_args_n_kw_var(false, unum, sp, &out_args);
-
-                        mp_code_state_t *new_state = mp_obj_fun_bc_prepare_codestate(out_args.fun,
-                            out_args.n_args, out_args.n_kw, out_args.args);
-                        #if !MICROPY_ENABLE_PYSTACK
-                        // Freeing args at this point does not follow a LIFO order so only do it if
-                        // pystack is not enabled.  For pystack, they are freed when code_state is.
-                        mp_nonlocal_free(out_args.args, out_args.n_alloc * sizeof(mp_obj_t));
-                        #endif
-                        if (new_state) {
-                            new_state->prev = code_state;
-                            code_state = new_state;
-                            nlr_pop();
-                            goto run_code_state;
-                        }
-                        #if MICROPY_STACKLESS_STRICT
-                        else {
-                            goto deep_recursion_error;
-                        }
-                        #else
-                        // If we couldn't allocate codestate on heap, in
-                        // non non-strict case fall thru to stack allocation.
-                        #endif
-                    }
-                    #endif
+                    // We have folowing stack layout here:
+                    // fun [arg|*arg]* [k:v|**kw]* <- TOS
+                    sp -= (unum & 0xff) + ((unum >> 8) & 0xff);
                     SET_TOP(mp_call_method_n_kw_var(false, unum, sp));
                     DISPATCH();
                 }
@@ -996,34 +948,7 @@ unwind_jump:;
                     DECODE_UINT;
                     // unum & 0xff == n_positional
                     // (unum >> 8) & 0xff == n_keyword
-                    sp -= (unum & 0xff) + ((unum >> 7) & 0x1fe) + 1;
-                    #if MICROPY_STACKLESS
-                    if (mp_obj_get_type(*sp) == &mp_type_fun_bc) {
-                        code_state->ip = ip;
-                        code_state->sp = sp;
-                        code_state->exc_sp = MP_TAGPTR_MAKE(exc_sp, currently_in_except_block);
-
-                        size_t n_args = unum & 0xff;
-                        size_t n_kw = (unum >> 8) & 0xff;
-                        int adjust = (sp[1] == MP_OBJ_NULL) ? 0 : 1;
-
-                        mp_code_state_t *new_state = mp_obj_fun_bc_prepare_codestate(*sp, n_args + adjust, n_kw, sp + 2 - adjust);
-                        if (new_state) {
-                            new_state->prev = code_state;
-                            code_state = new_state;
-                            nlr_pop();
-                            goto run_code_state;
-                        }
-                        #if MICROPY_STACKLESS_STRICT
-                        else {
-                            goto deep_recursion_error;
-                        }
-                        #else
-                        // If we couldn't allocate codestate on heap, in
-                        // non non-strict case fall thru to stack allocation.
-                        #endif
-                    }
-                    #endif
+                    sp -= (unum & 0xff) + ((unum >> 8) & 0xff) + 1;
                     SET_TOP(mp_call_method_n_kw(unum & 0xff, (unum >> 8) & 0xff, sp));
                     DISPATCH();
                 }
@@ -1033,41 +958,9 @@ unwind_jump:;
                     DECODE_UINT;
                     // unum & 0xff == n_positional
                     // (unum >> 8) & 0xff == n_keyword
-                    // We have following stack layout here:
-                    // fun self arg0 arg1 ... kw0 val0 kw1 val1 ... seq dict <- TOS
-                    sp -= (unum & 0xff) + ((unum >> 7) & 0x1fe) + 3;
-                    #if MICROPY_STACKLESS
-                    if (mp_obj_get_type(*sp) == &mp_type_fun_bc) {
-                        code_state->ip = ip;
-                        code_state->sp = sp;
-                        code_state->exc_sp = MP_TAGPTR_MAKE(exc_sp, currently_in_except_block);
-
-                        mp_call_args_t out_args;
-                        mp_call_prepare_args_n_kw_var(true, unum, sp, &out_args);
-
-                        mp_code_state_t *new_state = mp_obj_fun_bc_prepare_codestate(out_args.fun,
-                            out_args.n_args, out_args.n_kw, out_args.args);
-                        #if !MICROPY_ENABLE_PYSTACK
-                        // Freeing args at this point does not follow a LIFO order so only do it if
-                        // pystack is not enabled.  For pystack, they are freed when code_state is.
-                        mp_nonlocal_free(out_args.args, out_args.n_alloc * sizeof(mp_obj_t));
-                        #endif
-                        if (new_state) {
-                            new_state->prev = code_state;
-                            code_state = new_state;
-                            nlr_pop();
-                            goto run_code_state;
-                        }
-                        #if MICROPY_STACKLESS_STRICT
-                        else {
-                            goto deep_recursion_error;
-                        }
-                        #else
-                        // If we couldn't allocate codestate on heap, in
-                        // non non-strict case fall thru to stack allocation.
-                        #endif
-                    }
-                    #endif
+                    // We have folowing stack layout here:
+                    // fun [arg|*arg]* [k:v|**kw]* <- TOS
+                    sp -= (unum & 0xff) + ((unum >> 8) & 0xff) + 1;
                     SET_TOP(mp_call_method_n_kw_var(true, unum, sp));
                     DISPATCH();
                 }

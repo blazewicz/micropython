@@ -78,6 +78,7 @@ static const void *const entry_table[256] = {
     [MP_BC_FOR_ITER] = &&entry_MP_BC_FOR_ITER,
     [MP_BC_POP_BLOCK] = &&entry_MP_BC_POP_BLOCK,
     [MP_BC_POP_EXCEPT] = &&entry_MP_BC_POP_EXCEPT,
+    [MP_BC_BUILD_STAR] = &&entry_MP_BC_BUILD_STAR,
     [MP_BC_BUILD_TUPLE] = &&entry_MP_BC_BUILD_TUPLE,
     [MP_BC_BUILD_LIST] = &&entry_MP_BC_BUILD_LIST,
     [MP_BC_BUILD_MAP] = &&entry_MP_BC_BUILD_MAP,

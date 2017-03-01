@@ -115,6 +115,7 @@ typedef struct _emit_method_table_t {
     void (*pop_except)(emit_t *emit);
     void (*unary_op)(emit_t *emit, mp_unary_op_t op);
     void (*binary_op)(emit_t *emit, mp_binary_op_t op);
+    void (*build_star)(emit_t *emit);
     void (*build_tuple)(emit_t *emit, mp_uint_t n_args);
     void (*build_list)(emit_t *emit, mp_uint_t n_args);
     void (*build_map)(emit_t *emit, mp_uint_t n_args);
@@ -233,6 +234,7 @@ void mp_emit_bc_pop_block(emit_t *emit);
 void mp_emit_bc_pop_except(emit_t *emit);
 void mp_emit_bc_unary_op(emit_t *emit, mp_unary_op_t op);
 void mp_emit_bc_binary_op(emit_t *emit, mp_binary_op_t op);
+void mp_emit_bc_build_star(emit_t *emit);
 void mp_emit_bc_build_tuple(emit_t *emit, mp_uint_t n_args);
 void mp_emit_bc_build_list(emit_t *emit, mp_uint_t n_args);
 void mp_emit_bc_build_map(emit_t *emit, mp_uint_t n_args);
