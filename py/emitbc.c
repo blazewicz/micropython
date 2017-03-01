@@ -798,6 +798,8 @@ void mp_emit_bc_build(emit_t *emit, mp_uint_t n_args, int kind) {
     MP_STATIC_ASSERT(MP_BC_BUILD_TUPLE + MP_EMIT_BUILD_MAP == MP_BC_BUILD_MAP);
     MP_STATIC_ASSERT(MP_BC_BUILD_TUPLE + MP_EMIT_BUILD_SET == MP_BC_BUILD_SET);
     MP_STATIC_ASSERT(MP_BC_BUILD_TUPLE + MP_EMIT_BUILD_SLICE == MP_BC_BUILD_SLICE);
+    MP_STATIC_ASSERT(MP_BC_BUILD_TUPLE + MP_EMIT_BUILD_STAR == MP_BC_BUILD_STAR);
+    MP_STATIC_ASSERT(MP_BC_BUILD_TUPLE + MP_EMIT_BUILD_DBLSTAR == MP_BC_BUILD_DBLSTAR);
     if (kind == MP_EMIT_BUILD_MAP) {
         emit_bc_pre(emit, 1);
     } else {
@@ -864,12 +866,13 @@ void mp_emit_bc_make_closure(emit_t *emit, scope_t *scope, mp_uint_t n_closed_ov
 
 STATIC void emit_bc_call_function_method_helper(emit_t *emit, mp_int_t stack_adj, mp_uint_t bytecode_base, mp_uint_t n_positional, mp_uint_t n_keyword, mp_uint_t star_flags) {
     if (star_flags) {
-        emit_bc_pre(emit, stack_adj - (mp_int_t)n_positional - 2 * (mp_int_t)n_keyword - 2);
-        emit_write_bytecode_byte_uint(emit, bytecode_base + 1, (n_keyword << 8) | n_positional); // TODO make it 2 separate uints?
-    } else {
-        emit_bc_pre(emit, stack_adj - (mp_int_t)n_positional - 2 * (mp_int_t)n_keyword);
-        emit_write_bytecode_byte_uint(emit, bytecode_base, (n_keyword << 8) | n_positional); // TODO make it 2 separate uints?
+        // MP_BC_CALL_FUNCTION -> MP_BC_CALL_FUNCTION_VAR_KW
+        // MP_BC_CALL_METHOD -> MP_BC_CALL_METHOD_VAR_KW
+        bytecode_base += 1;
     }
+
+    emit_bc_pre(emit, stack_adj - (mp_int_t)n_positional - (mp_int_t)n_keyword);
+    emit_write_bytecode_byte_uint(emit, bytecode_base, (n_keyword << 8) | n_positional); // TODO make it 2 separate uints?
 }
 
 void mp_emit_bc_call_function(emit_t *emit, mp_uint_t n_positional, mp_uint_t n_keyword, mp_uint_t star_flags) {

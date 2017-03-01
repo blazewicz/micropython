@@ -167,6 +167,7 @@ typedef enum {
     MP_F_OBJ_IS_TRUE,
     MP_F_UNARY_OP,
     MP_F_BINARY_OP,
+    MP_F_BUILD_STAR,
     MP_F_BUILD_TUPLE,
     MP_F_BUILD_LIST,
     MP_F_LIST_APPEND,

@@ -406,6 +406,10 @@ const byte *mp_bytecode_print_str(const byte *ip) {
             printf("POP_EXCEPT_JUMP " UINT_FMT, (mp_uint_t)(ip + unum - mp_showbc_code_start));
             break;
 
+        case MP_BC_BUILD_STAR:
+            printf("BUILD_STAR");
+            break;
+
         case MP_BC_BUILD_TUPLE:
             DECODE_UINT;
             printf("BUILD_TUPLE " UINT_FMT, unum);

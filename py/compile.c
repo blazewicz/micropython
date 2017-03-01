@@ -2352,24 +2352,23 @@ STATIC void compile_trailer_paren_helper(compiler_t *comp, mp_parse_node_t pn_ar
     int n_positional = n_positional_extra;
     uint n_keyword = 0;
     uint star_flags = 0;
-    mp_parse_node_struct_t *star_args_node = NULL, *dblstar_args_node = NULL;
     for (int i = 0; i < n_args; i++) {
         if (MP_PARSE_NODE_IS_STRUCT(args[i])) {
             mp_parse_node_struct_t *pns_arg = (mp_parse_node_struct_t*)args[i];
             if (MP_PARSE_NODE_STRUCT_KIND(pns_arg) == PN_arglist_star) {
-                if (star_flags & MP_EMIT_STAR_FLAG_SINGLE) {
-                    compile_syntax_error(comp, (mp_parse_node_t)pns_arg, "can't have multiple *x");
+                if (n_keyword > 0) {
+                    compile_syntax_error(comp, args[i], "non-keyword arg after keyword arg");
                     return;
                 }
                 star_flags |= MP_EMIT_STAR_FLAG_SINGLE;
-                star_args_node = pns_arg;
+                compile_node(comp, pns_arg->nodes[0]);
+                EMIT(build_star);
+                n_positional++;
             } else if (MP_PARSE_NODE_STRUCT_KIND(pns_arg) == PN_arglist_dbl_star) {
-                if (star_flags & MP_EMIT_STAR_FLAG_DOUBLE) {
-                    compile_syntax_error(comp, (mp_parse_node_t)pns_arg, "can't have multiple **x");
-                    return;
-                }
                 star_flags |= MP_EMIT_STAR_FLAG_DOUBLE;
-                dblstar_args_node = pns_arg;
+                compile_node(comp, pns_arg->nodes[0]);
+                EMIT(build_star);
+                n_keyword++;
             } else if (MP_PARSE_NODE_STRUCT_KIND(pns_arg) == PN_argument) {
                 if (!MP_PARSE_NODE_IS_STRUCT_KIND(pns_arg->nodes[1], PN_comp_for)) {
                     if (!MP_PARSE_NODE_IS_ID(pns_arg->nodes[0])) {
@@ -2378,7 +2377,7 @@ STATIC void compile_trailer_paren_helper(compiler_t *comp, mp_parse_node_t pn_ar
                     }
                     EMIT_ARG(load_const_str, MP_PARSE_NODE_LEAF_ARG(pns_arg->nodes[0]));
                     compile_node(comp, pns_arg->nodes[1]);
-                    n_keyword += 1;
+                    n_keyword += 2;
                 } else {
                     compile_comprehension(comp, pns_arg, SCOPE_GEN_EXPR);
                     n_positional++;
@@ -2398,21 +2397,6 @@ STATIC void compile_trailer_paren_helper(compiler_t *comp, mp_parse_node_t pn_ar
             }
             compile_node(comp, args[i]);
             n_positional++;
-        }
-    }
-
-    // compile the star/double-star arguments if we had them
-    // if we had one but not the other then we load "null" as a place holder
-    if (star_flags != 0) {
-        if (star_args_node == NULL) {
-            EMIT(load_null);
-        } else {
-            compile_node(comp, star_args_node->nodes[0]);
-        }
-        if (dblstar_args_node == NULL) {
-            EMIT(load_null);
-        } else {
-            compile_node(comp, dblstar_args_node->nodes[0]);
         }
     }
 

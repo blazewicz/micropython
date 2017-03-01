@@ -538,6 +538,7 @@ extern const mp_obj_type_t mp_type_bytearray;
 extern const mp_obj_type_t mp_type_memoryview;
 extern const mp_obj_type_t mp_type_float;
 extern const mp_obj_type_t mp_type_complex;
+extern const mp_obj_type_t mp_type_star;
 extern const mp_obj_type_t mp_type_tuple;
 extern const mp_obj_type_t mp_type_list;
 extern const mp_obj_type_t mp_type_map; // map (the python builtin, not the dict implementation detail)
@@ -659,6 +660,7 @@ mp_obj_t mp_obj_new_fun_native(mp_obj_t def_args_in, mp_obj_t def_kw_args, const
 mp_obj_t mp_obj_new_fun_asm(size_t n_args, const void *fun_data, mp_uint_t type_sig);
 mp_obj_t mp_obj_new_gen_wrap(mp_obj_t fun);
 mp_obj_t mp_obj_new_closure(mp_obj_t fun, size_t n_closed, const mp_obj_t *closed);
+mp_obj_t mp_obj_new_star(mp_obj_t arg);
 mp_obj_t mp_obj_new_tuple(size_t n, const mp_obj_t *items);
 mp_obj_t mp_obj_new_list(size_t n, mp_obj_t *items);
 mp_obj_t mp_obj_new_dict(size_t n_args);
@@ -748,6 +750,9 @@ mp_obj_t mp_obj_complex_binary_op(mp_binary_op_t op, mp_float_t lhs_real, mp_flo
 #else
 #define mp_obj_is_float(o) (false)
 #endif
+
+// star
+mp_obj_t mp_obj_star_get(mp_obj_t *self_in);
 
 // tuple
 void mp_obj_tuple_get(mp_obj_t self_in, size_t *len, mp_obj_t **items);

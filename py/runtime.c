@@ -622,7 +622,7 @@ mp_obj_t mp_call_function_n_kw(mp_obj_t fun_in, size_t n_args, size_t n_kw, cons
 
     // do the call
     if (type->call != NULL) {
-        return type->call(fun_in, n_args, n_kw, args);
+        return type->call(fun_in, n_args, n_kw/2, args);  // takes number of keyword pairs
     }
 
     if (MICROPY_ERROR_REPORTING == MICROPY_ERROR_REPORTING_TERSE) {
@@ -651,164 +651,153 @@ void mp_call_prepare_args_n_kw_var(bool have_self, size_t n_args_n_kw, const mp_
     if (have_self) {
         self = *args++; // may be MP_OBJ_NULL
     }
-    uint n_args = n_args_n_kw & 0xff;
-    uint n_kw = (n_args_n_kw >> 8) & 0xff;
-    mp_obj_t pos_seq = args[n_args + 2 * n_kw]; // may be MP_OBJ_NULL
-    mp_obj_t kw_dict = args[n_args + 2 * n_kw + 1]; // may be MP_OBJ_NULL
+    size_t n_args = n_args_n_kw & 0xff;
+    size_t n_kw = (n_args_n_kw >> 8) & 0xff;
 
-    DEBUG_OP_printf("call method var (fun=%p, self=%p, n_args=%u, n_kw=%u, args=%p, seq=%p, dict=%p)\n", fun, self, n_args, n_kw, args, pos_seq, kw_dict);
+    DEBUG_OP_printf("call method var (fun=%p, self=%p, n_args=%u, n_kw=%u, args=%p)\n", fun, self, n_args, n_kw, args);
 
-    // We need to create the following array of objects:
-    //     args[0 .. n_args]  unpacked(pos_seq)  args[n_args .. n_args + 2 * n_kw]  unpacked(kw_dict)
+    // We need to create an array with pos args first and key:value pairs next.
     // TODO: optimize one day to avoid constructing new arg array? Will be hard.
 
     // The new args array
-    mp_obj_t *args2;
-    uint args2_alloc;
-    uint args2_len = 0;
+    size_t args2_alloc = (have_self ? 1 : 0) + n_args + n_kw;
+    mp_obj_t *args2 = m_new(mp_obj_t, args2_alloc);
+    size_t args2_len = 0;
 
-    // Try to get a hint for the size of the kw_dict
-    uint kw_dict_len = 0;
-    if (kw_dict != MP_OBJ_NULL && mp_obj_is_type(kw_dict, &mp_type_dict)) {
-        kw_dict_len = mp_obj_dict_len(kw_dict);
+    // copy the self
+    if (self != MP_OBJ_NULL) {
+        args2[args2_len++] = self;
     }
 
-    // Extract the pos_seq sequence to the new args array.
-    // Note that it can be arbitrary iterator.
-    if (pos_seq == MP_OBJ_NULL) {
-        // no sequence
+    // iterate over positional args
+    for (size_t i_args = 0; i_args < n_args; i_args++) {
+        if (MP_OBJ_IS_TYPE(args[i_args], &mp_type_star)) {
+            // argument after *
 
-        // allocate memory for the new array of args
-        args2_alloc = 1 + n_args + 2 * (n_kw + kw_dict_len);
-        args2 = mp_nonlocal_alloc(args2_alloc * sizeof(mp_obj_t));
+            mp_obj_t arg = mp_obj_star_get(args[i_args]);
+            if (MP_OBJ_IS_TYPE(arg, &mp_type_tuple) || MP_OBJ_IS_TYPE(arg, &mp_type_list)) {
+                // optimise the case of a tuple and list
 
-        // copy the self
-        if (self != MP_OBJ_NULL) {
-            args2[args2_len++] = self;
-        }
+                // get the items
+                mp_uint_t len;
+                mp_obj_t *items;
+                mp_obj_get_array(arg, &len, &items);
 
-        // copy the fixed pos args
-        mp_seq_copy(args2 + args2_len, args, n_args, mp_obj_t);
-        args2_len += n_args;
+                // expand output array of args
+                args2 = m_renew(mp_obj_t, args2, args2_alloc, args2_alloc + len - 1);
+                args2_alloc += len - 1;
 
-    } else if (mp_obj_is_type(pos_seq, &mp_type_tuple) || mp_obj_is_type(pos_seq, &mp_type_list)) {
-        // optimise the case of a tuple and list
+                // copy the variable pos args
+                mp_seq_copy(args2 + args2_len, items, len, mp_obj_t);
+                args2_len += len;
+            } else /* if is iter TODO */ {
+                // generic iterator
 
-        // get the items
-        size_t len;
-        mp_obj_t *items;
-        mp_obj_get_array(pos_seq, &len, &items);
+                // extract the variable position args from the iterator
+                mp_obj_iter_buf_t iter_buf;
+                mp_obj_t iterable = mp_getiter(arg, &iter_buf);  // can raise TypError
+                mp_obj_t item;
+                while ((item = mp_iternext(iterable)) != MP_OBJ_STOP_ITERATION) {
+                    if (args2_len >= args2_alloc) {
+                        args2 = m_renew(mp_obj_t, args2, args2_alloc, args2_alloc * 2);
+                        args2_alloc *= 2;
+                    }
+                    args2[args2_len++] = item;
+                }
+            } /* else {
+                mp_raise_TypeError("argument after * must be an iterable");
+            } */
+        } else {
+            // normal positional argument
 
-        // allocate memory for the new array of args
-        args2_alloc = 1 + n_args + len + 2 * (n_kw + kw_dict_len);
-        args2 = mp_nonlocal_alloc(args2_alloc * sizeof(mp_obj_t));
-
-        // copy the self
-        if (self != MP_OBJ_NULL) {
-            args2[args2_len++] = self;
-        }
-
-        // copy the fixed and variable position args
-        mp_seq_cat(args2 + args2_len, args, n_args, items, len, mp_obj_t);
-        args2_len += n_args + len;
-
-    } else {
-        // generic iterator
-
-        // allocate memory for the new array of args
-        args2_alloc = 1 + n_args + 2 * (n_kw + kw_dict_len) + 3;
-        args2 = mp_nonlocal_alloc(args2_alloc * sizeof(mp_obj_t));
-
-        // copy the self
-        if (self != MP_OBJ_NULL) {
-            args2[args2_len++] = self;
-        }
-
-        // copy the fixed position args
-        mp_seq_copy(args2 + args2_len, args, n_args, mp_obj_t);
-        args2_len += n_args;
-
-        // extract the variable position args from the iterator
-        mp_obj_iter_buf_t iter_buf;
-        mp_obj_t iterable = mp_getiter(pos_seq, &iter_buf);
-        mp_obj_t item;
-        while ((item = mp_iternext(iterable)) != MP_OBJ_STOP_ITERATION) {
-            if (args2_len >= args2_alloc) {
-                args2 = mp_nonlocal_realloc(args2, args2_alloc * sizeof(mp_obj_t), args2_alloc * 2 * sizeof(mp_obj_t));
-                args2_alloc *= 2;
-            }
-            args2[args2_len++] = item;
+            args2[args2_len++] = args[i_args];
         }
     }
 
     // The size of the args2 array now is the number of positional args.
-    uint pos_args_len = args2_len;
+    size_t pos_args_len = args2_len;
 
-    // Copy the fixed kw args.
-    mp_seq_copy(args2 + args2_len, args + n_args, 2 * n_kw, mp_obj_t);
-    args2_len += 2 * n_kw;
+    // iterate over keyword args
+    for (size_t i_args = n_args; i_args < (n_args + n_kw); i_args++) {
+        if (mp_obj_is_type(args[i_args], &mp_type_star)) {
+            // argument after **
 
-    // Extract (key,value) pairs from kw_dict dictionary and append to args2.
-    // Note that it can be arbitrary iterator.
-    if (kw_dict == MP_OBJ_NULL) {
-        // pass
-    } else if (mp_obj_is_type(kw_dict, &mp_type_dict)) {
-        // dictionary
-        mp_map_t *map = mp_obj_dict_get_map(kw_dict);
-        assert(args2_len + 2 * map->used <= args2_alloc); // should have enough, since kw_dict_len is in this case hinted correctly above
-        for (size_t i = 0; i < map->alloc; i++) {
-            if (mp_map_slot_is_filled(map, i)) {
-                // the key must be a qstr, so intern it if it's a string
-                mp_obj_t key = map->table[i].key;
-                if (!mp_obj_is_qstr(key)) {
-                    key = mp_obj_str_intern_checked(key);
+            mp_obj_t arg = mp_obj_star_get(args[i_args]);
+            if (mp_obj_is_type(arg, &mp_type_dict)) {
+                // dictionary
+
+                mp_map_t *map = mp_obj_dict_get_map(arg);
+
+                // expand output array of args
+                // TODO: don't shrink
+                args2 = m_renew(mp_obj_t, args2, args2_alloc, args2_alloc + 2*map->used - 1);
+                args2_alloc += 2*map->used - 1;
+
+                // copy items from dict
+                for (size_t i = 0; i < map->alloc; i++) {
+                    if (MP_MAP_SLOT_IS_FILLED(map, i)) {
+                        // the key must be a str
+                        mp_obj_t key = map->table[i].key;
+                        if (mp_obj_is_qstr(key)) { // TODO
+                            key = mp_obj_str_intern_checked(key);
+                            //mp_raise_TypeError("keywords must be strings");
+                        }
+                        args2[args2_len++] = key;
+                        args2[args2_len++] = map->table[i].value;
+                    }
                 }
-                args2[args2_len++] = key;
-                args2[args2_len++] = map->table[i].value;
-            }
-        }
-    } else {
-        // generic mapping:
-        // - call keys() to get an iterable of all keys in the mapping
-        // - call __getitem__ for each key to get the corresponding value
+            } else /* if is mapping TODO */ {
+                // generic mapping:
+                // - call keys() to get an iterable of all keys in the mapping
+                // - call __getitem__ for each key to get the corresponding value
 
-        // get the keys iterable
-        mp_obj_t dest[3];
-        mp_load_method(kw_dict, MP_QSTR_keys, dest);
-        mp_obj_t iterable = mp_getiter(mp_call_method_n_kw(0, 0, dest), NULL);
+                // get the keys iterable
+                mp_obj_t dest[3];
+                mp_load_method(arg, MP_QSTR_keys, dest);
+                mp_obj_t iterable = mp_getiter(mp_call_method_n_kw(0, 0, dest), NULL);
 
-        mp_obj_t key;
-        while ((key = mp_iternext(iterable)) != MP_OBJ_STOP_ITERATION) {
-            // expand size of args array if needed
-            if (args2_len + 1 >= args2_alloc) {
-                uint new_alloc = args2_alloc * 2;
-                if (new_alloc < 4) {
-                    new_alloc = 4;
+                mp_obj_t key;
+                while ((key = mp_iternext(iterable)) != MP_OBJ_STOP_ITERATION) {
+                    // expand size of args array if needed
+                    if (args2_len + 1 >= args2_alloc) {
+                        size_t new_alloc = args2_alloc * 2;
+                        if (new_alloc < 4) {
+                            new_alloc = 4;
+                        }
+                        // TODO: don't shrink
+                        args2 = m_renew(mp_obj_t, args2, args2_alloc, new_alloc);
+                        args2_alloc = new_alloc;
+                    }
+
+                    // the key must be a qstr, so intern it if it's a string
+                    if (mp_obj_is_qstr(key)) {
+                        key = mp_obj_str_intern_checked(key);
+                    }
+
+                    // get the value corresponding to the key
+                    mp_load_method(arg, MP_QSTR___getitem__, dest);
+                    dest[2] = key;
+                    mp_obj_t value = mp_call_method_n_kw(1, 0, dest);
+
+                    // store the key/value pair in the argument array
+                    args2[args2_len++] = key;
+                    args2[args2_len++] = value;
                 }
-                args2 = mp_nonlocal_realloc(args2, args2_alloc * sizeof(mp_obj_t), new_alloc * sizeof(mp_obj_t));
-                args2_alloc = new_alloc;
-            }
+            } /* else TODO {
+                mp_raise_TypeError("argument after ** must be a mapping");
+            } */
+        } else {
+            // normal keyword argument
 
-            // the key must be a qstr, so intern it if it's a string
-            if (!mp_obj_is_qstr(key)) {
-                key = mp_obj_str_intern_checked(key);
-            }
-
-            // get the value corresponding to the key
-            mp_load_method(kw_dict, MP_QSTR___getitem__, dest);
-            dest[2] = key;
-            mp_obj_t value = mp_call_method_n_kw(1, 0, dest);
-
-            // store the key/value pair in the argument array
-            args2[args2_len++] = key;
-            args2[args2_len++] = value;
+            args2[args2_len++] = args[i_args++];
+            args2[args2_len++] = args[i_args];
         }
     }
 
     out_args->fun = fun;
     out_args->args = args2;
     out_args->n_args = pos_args_len;
-    out_args->n_kw = (args2_len - pos_args_len) / 2;
+    out_args->n_kw = args2_len - pos_args_len;
     out_args->n_alloc = args2_alloc;
 }
 
