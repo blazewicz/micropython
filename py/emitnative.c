@@ -2508,7 +2508,7 @@ STATIC void emit_native_call_function(emit_t *emit, mp_uint_t n_positional, mp_u
     // and wanted type info for return, to remove need for boxing/unboxing
 
     emit_native_pre(emit);
-    vtype_kind_t vtype_fun = peek_vtype(emit, n_positional + 2 * n_keyword);
+    vtype_kind_t vtype_fun = peek_vtype(emit, n_positional + n_keyword);
     if (vtype_fun == VTYPE_BUILTIN_CAST) {
         // casting operator
         assert(n_positional == 1 && n_keyword == 0);
@@ -2542,12 +2542,12 @@ STATIC void emit_native_call_function(emit_t *emit, mp_uint_t n_positional, mp_u
     } else {
         assert(vtype_fun == VTYPE_PYOBJ);
         if (star_flags) {
-            emit_get_stack_pointer_to_reg_for_pop(emit, REG_ARG_3, n_positional + 2 * n_keyword + 3); // pointer to args
+            emit_get_stack_pointer_to_reg_for_pop(emit, REG_ARG_3, 1 + n_positional + n_keyword); // pointer to args
             emit_call_with_2_imm_args(emit, MP_F_CALL_METHOD_N_KW_VAR, 0, REG_ARG_1, n_positional | (n_keyword << 8), REG_ARG_2);
             emit_post_push_reg(emit, VTYPE_PYOBJ, REG_RET);
         } else {
             if (n_positional != 0 || n_keyword != 0) {
-                emit_get_stack_pointer_to_reg_for_pop(emit, REG_ARG_3, n_positional + 2 * n_keyword); // pointer to args
+                emit_get_stack_pointer_to_reg_for_pop(emit, REG_ARG_3, n_positional + n_keyword); // pointer to args
             }
             emit_pre_pop_reg(emit, &vtype_fun, REG_ARG_1); // the function
             emit_call_with_imm_arg(emit, MP_F_NATIVE_CALL_FUNCTION_N_KW, n_positional | (n_keyword << 8), REG_ARG_2);
@@ -2557,16 +2557,12 @@ STATIC void emit_native_call_function(emit_t *emit, mp_uint_t n_positional, mp_u
 }
 
 STATIC void emit_native_call_method(emit_t *emit, mp_uint_t n_positional, mp_uint_t n_keyword, mp_uint_t star_flags) {
-    if (star_flags) {
-        emit_get_stack_pointer_to_reg_for_pop(emit, REG_ARG_3, n_positional + 2 * n_keyword + 4); // pointer to args
-        emit_call_with_2_imm_args(emit, MP_F_CALL_METHOD_N_KW_VAR, 1, REG_ARG_1, n_positional | (n_keyword << 8), REG_ARG_2);
-        emit_post_push_reg(emit, VTYPE_PYOBJ, REG_RET);
-    } else {
-        emit_native_pre(emit);
-        emit_get_stack_pointer_to_reg_for_pop(emit, REG_ARG_3, 2 + n_positional + 2 * n_keyword); // pointer to items, including meth and self
-        emit_call_with_2_imm_args(emit, MP_F_CALL_METHOD_N_KW, n_positional, REG_ARG_1, n_keyword, REG_ARG_2);
-        emit_post_push_reg(emit, VTYPE_PYOBJ, REG_RET);
-    }
+    DEBUG_printf("call_method(n_pos=" UINT_FMT ", n_kw=" UINT_FMT ", star_flags=" UINT_FMT ")\n", n_positional, n_keyword, star_flags);
+    uint op = star_flags ? MP_F_CALL_METHOD_N_KW_VAR : MP_F_CALL_METHOD_N_KW;
+    emit_native_pre(emit);
+    emit_get_stack_pointer_to_reg_for_pop(emit, REG_ARG_3, 2 + n_positional + n_keyword); // pointer to items, including meth and self
+    emit_call_with_2_imm_args(emit, op, 1, REG_ARG_1, n_positional | (n_keyword << 8), REG_ARG_2);
+    emit_post_push_reg(emit, VTYPE_PYOBJ, REG_RET);
 }
 
 STATIC void emit_native_return_value(emit_t *emit) {
