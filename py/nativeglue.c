@@ -140,6 +140,7 @@ void *const mp_fun_table[MP_F_NUMBER_OF] = {
     mp_obj_is_true,
     mp_unary_op,
     mp_binary_op,
+    mp_obj_new_star,
     mp_obj_new_tuple,
     mp_obj_new_list,
     mp_obj_list_append,
