@@ -769,8 +769,7 @@ unwind_jump:;
 
                 ENTRY(MP_BC_BUILD_STAR): {
                     MARK_EXC_IP_SELECTIVE();
-                    mp_obj_t arg = POP();
-                    PUSH(mp_obj_new_star(arg));
+                    SET_TOP(mp_obj_new_star(TOP()));
                     DISPATCH();
                 }
 
