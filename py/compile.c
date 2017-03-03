@@ -856,7 +856,7 @@ STATIC void compile_decorated(compiler_t *comp, mp_parse_node_struct_t *pns) {
 
     // call each decorator
     for (int i = 0; i < n - num_built_in_decorators; i++) {
-        EMIT_ARG(call_function, 1, 0, 0);
+        EMIT_ARG(call_function, 1, 0);
     }
 
     // store func/class object into name
@@ -1231,7 +1231,7 @@ STATIC void compile_assert_stmt(compiler_t *comp, mp_parse_node_struct_t *pns) {
     if (!MP_PARSE_NODE_IS_NULL(pns->nodes[1])) {
         // assertion message
         compile_node(comp, pns->nodes[1]);
-        EMIT_ARG(call_function, 1, 0, 0);
+        EMIT_ARG(call_function, 1, 0);
     }
     EMIT_ARG(raise_varargs, 1);
     EMIT_ARG(label_assign, l_end);
@@ -1710,7 +1710,7 @@ STATIC void compile_yield_from(compiler_t *comp) {
 #if MICROPY_PY_ASYNC_AWAIT
 STATIC void compile_await_object_method(compiler_t *comp, qstr method) {
     EMIT_ARG(load_method, method, false);
-    EMIT_ARG(call_method, 0, 0, 0);
+    EMIT_ARG(call_method, 0, 0);
     compile_yield_from(comp);
 }
 
@@ -1820,12 +1820,12 @@ STATIC void compile_async_with_stmt_helper(compiler_t *comp, int n, mp_parse_nod
         #else
         compile_load_id(comp, MP_QSTR_type);
         EMIT(rot_two);
-        EMIT_ARG(call_function, 1, 0, 0); // get type(exc)
+        EMIT_ARG(call_function, 1, 0); // get type(exc)
         #endif
         EMIT(rot_two);
         EMIT_ARG(load_const_tok, MP_TOKEN_KW_NONE); // dummy traceback value
         // at this point the stack contains: ..., __aexit__, self, type(exc), exc, None
-        EMIT_ARG(call_method, 3, 0, 0);
+        EMIT_ARG(call_method, 3, 0);
 
         compile_yield_from(comp);
         EMIT_ARG(pop_jump_if, true, no_reraise_label);
@@ -1844,7 +1844,7 @@ STATIC void compile_async_with_stmt_helper(compiler_t *comp, int n, mp_parse_nod
         EMIT_ARG(load_const_tok, MP_TOKEN_KW_NONE);
         EMIT(dup_top);
         EMIT(dup_top);
-        EMIT_ARG(call_method, 3, 0, 0);
+        EMIT_ARG(call_method, 3, 0);
         compile_yield_from(comp);
         EMIT(pop_top);
 
@@ -1888,7 +1888,7 @@ STATIC void compile_expr_stmt(compiler_t *comp, mp_parse_node_struct_t *pns) {
             // for REPL, evaluate then print the expression
             compile_load_id(comp, MP_QSTR___repl_print__);
             compile_node(comp, pns->nodes[0]);
-            EMIT_ARG(call_function, 1, 0, 0);
+            EMIT_ARG(call_function, 1, 0);
             EMIT(pop_top);
 
         } else {
@@ -2226,7 +2226,7 @@ STATIC void compile_atom_expr_normal(compiler_t *comp, mp_parse_node_struct_t *p
             i = 3;
         } else {
             // a super() call
-            EMIT_ARG(call_function, 2, 0, 0);
+            EMIT_ARG(call_function, 2, 0);
             i = 1;
         }
     }
@@ -2267,7 +2267,6 @@ STATIC void compile_trailer_paren_helper(compiler_t *comp, mp_parse_node_t pn_ar
     // error messages.
     int n_positional = n_positional_extra;
     uint n_keyword = 0;
-    uint star_flags = 0;
     for (int i = 0; i < n_args; i++) {
         if (MP_PARSE_NODE_IS_STRUCT(args[i])) {
             mp_parse_node_struct_t *pns_arg = (mp_parse_node_struct_t*)args[i];
@@ -2276,12 +2275,10 @@ STATIC void compile_trailer_paren_helper(compiler_t *comp, mp_parse_node_t pn_ar
                     compile_syntax_error(comp, args[i], "non-keyword arg after keyword arg");
                     return;
                 }
-                star_flags |= MP_EMIT_STAR_FLAG_SINGLE;
                 compile_node(comp, pns_arg->nodes[0]);
                 EMIT(build_star);
                 n_positional++;
             } else if (MP_PARSE_NODE_STRUCT_KIND(pns_arg) == PN_arglist_dbl_star) {
-                star_flags |= MP_EMIT_STAR_FLAG_DOUBLE;
                 compile_node(comp, pns_arg->nodes[0]);
                 EMIT(build_star);
                 n_keyword++;
@@ -2318,9 +2315,9 @@ STATIC void compile_trailer_paren_helper(compiler_t *comp, mp_parse_node_t pn_ar
 
     // emit the function/method call
     if (is_method_call) {
-        EMIT_ARG(call_method, n_positional, n_keyword, star_flags);
+        EMIT_ARG(call_method, n_positional, n_keyword);
     } else {
-        EMIT_ARG(call_function, n_positional, n_keyword, star_flags);
+        EMIT_ARG(call_function, n_positional, n_keyword);
     }
 }
 
@@ -2347,7 +2344,7 @@ STATIC void compile_comprehension(compiler_t *comp, mp_parse_node_struct_t *pns,
     if (kind == SCOPE_GEN_EXPR) {
         EMIT_ARG(get_iter, false);
     }
-    EMIT_ARG(call_function, 1, 0, 0);
+    EMIT_ARG(call_function, 1, 0);
 }
 
 STATIC void compile_atom_paren(compiler_t *comp, mp_parse_node_struct_t *pns) {
