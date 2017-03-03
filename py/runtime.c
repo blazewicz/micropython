@@ -641,36 +641,40 @@ mp_obj_t mp_call_method_n_kw(size_t n_args, size_t n_kw, const mp_obj_t *args) {
     return mp_call_function_n_kw(args[0], n_args + adjust, n_kw, args + 2 - adjust);
 }
 
-// This function only needs to be exposed externally when in stackless mode.
-#if !MICROPY_STACKLESS
-STATIC
-#endif
-void mp_call_prepare_args_n_kw_var(bool have_self, size_t n_args_n_kw, const mp_obj_t *args, mp_call_args_t *out_args) {
+mp_obj_t mp_call_method_n_kw_var(bool have_self, size_t n_args_n_kw, const mp_obj_t *args) {
     mp_obj_t fun = *args++;
-    mp_obj_t self = MP_OBJ_NULL;
-    if (have_self) {
-        self = *args++; // may be MP_OBJ_NULL
-    }
     size_t n_args = n_args_n_kw & 0xff;
     size_t n_kw = (n_args_n_kw >> 8) & 0xff;
 
-    DEBUG_OP_printf("call method var (fun=%p, self=%p, n_args=%u, n_kw=%u, args=%p)\n", fun, self, n_args, n_kw, args);
+    DEBUG_OP_printf("call method (fun=%p, n_args=%lu, n_kw=%lu, args=%p)\n", fun, n_args, n_kw, args);
 
-    // We need to create an array with pos args first and key:value pairs next.
-    // TODO: optimize one day to avoid constructing new arg array? Will be hard.
+    // function (method) expects array of following structure:
+    // [self, ] arg0, arg1, ..., argN, kw0:val0, kw1:val1, ..., kwN:valN
 
     // The new args array
-    size_t args2_alloc = (have_self ? 1 : 0) + n_args + n_kw;
-    mp_obj_t *args2 = m_new(mp_obj_t, args2_alloc);
+    size_t args2_alloc = n_args + n_kw;  // this is size of all args on the stack
+    // mp_obj_t *args2 = m_new(mp_obj_t, args2_alloc);
+    bool have_star = false;
+    mp_obj_t *args2 = (mp_obj_t*)args;  // we don't need to alocate new buffer if no star arguments
     size_t args2_len = 0;
+    size_t i_args = 0;  // cursor on input argument list
 
-    // copy the self
-    if (self != MP_OBJ_NULL) {
-        args2[args2_len++] = self;
+    ssize_t adjust = 0;
+
+    if (have_self) {
+        if (args[0] == NULL) {  // staticmethod or module function
+            adjust = 1;
+        }
+        // self is also on the argslist
+        args2_alloc++;
+        n_args++;
+        // skip check on self
+        i_args++;
+        args2_len++;
     }
 
     // iterate over positional args
-    for (size_t i_args = 0; i_args < n_args; i_args++) {
+    for (; i_args < n_args; i_args++) {
         if (MP_OBJ_IS_TYPE(args[i_args], &mp_type_star)) {
             // argument after *
 
@@ -683,33 +687,53 @@ void mp_call_prepare_args_n_kw_var(bool have_self, size_t n_args_n_kw, const mp_
                 mp_obj_t *items;
                 mp_obj_get_array(arg, &len, &items);
 
-                // expand output array of args
-                args2 = m_renew(mp_obj_t, args2, args2_alloc, args2_alloc + len - 1);
+                if (!have_star) {
+                    // allocate temporary buffer and copy to it all normal arguments skipped so far
+                    args2 = m_new(mp_obj_t, args2_alloc - 1 + len);  // - star + array
+                    // printf("allocate %lu\n", args2_alloc - 1 + len);
+                    mp_seq_copy(args2, args, args2_len, mp_obj_t);
+                    have_star = true;
+                } else if (args2_alloc < args2_len + len) {
+                    // expand the temporary buffer
+                    args2 = m_renew(mp_obj_t, args2, args2_alloc, args2_alloc - 1 + len);
+                    // printf("expand %lu -> %lu\n", args2_alloc, args2_alloc - 1 + len);
+                }
                 args2_alloc += len - 1;
 
-                // copy the variable pos args
+                // copy elements from the array
                 mp_seq_copy(args2 + args2_len, items, len, mp_obj_t);
                 args2_len += len;
             } else /* if is iter TODO */ {
                 // generic iterator
 
-                // extract the variable position args from the iterator
+                // first, check if what we got is actually an iterator
                 mp_obj_iter_buf_t iter_buf;
                 mp_obj_t iterable = mp_getiter(arg, &iter_buf);  // can raise TypError
+
+                if (!have_star) {
+                    args2 = m_new(mp_obj_t, args2_alloc);  // first element will take place of the star
+                    // printf("allocate %lu\n", args2_alloc);
+                    mp_seq_copy(args2, args, args2_len, mp_obj_t);
+                    have_star = true;
+                }
+
+                // extract the variable position args from the iterator
                 mp_obj_t item;
-                while ((item = mp_iternext(iterable)) != MP_OBJ_STOP_ITERATION) {
+                for (size_t i = 1; (item = mp_iternext(iterable)) != MP_OBJ_STOP_ITERATION;) {
                     if (args2_len >= args2_alloc) {
-                        args2 = m_renew(mp_obj_t, args2, args2_alloc, args2_alloc * 2);
-                        args2_alloc *= 2;
+                        assert(i > 0); // XXX: list should have space at least for the first element
+                        args2 = m_renew(mp_obj_t, args2, args2_alloc, args2_alloc + 2*i);  // add 2, 4, 8, ...
+                        // printf("expand %lu -> %lu\n", args2_alloc, args2_alloc + 2*i);
+                        args2_alloc += 2*i;
+                        i++;
                     }
                     args2[args2_len++] = item;
                 }
-            } /* else {
-                mp_raise_TypeError("argument after * must be an iterable");
-            } */
+            }
         } else {
             // normal positional argument
 
+            // XXX: if !have_star this is a no-op
             args2[args2_len++] = args[i_args];
         }
     }
@@ -718,7 +742,7 @@ void mp_call_prepare_args_n_kw_var(bool have_self, size_t n_args_n_kw, const mp_
     size_t pos_args_len = args2_len;
 
     // iterate over keyword args
-    for (size_t i_args = n_args; i_args < (n_args + n_kw); i_args++) {
+    for (; i_args < (n_args + n_kw); i_args++) {
         if (mp_obj_is_type(args[i_args], &mp_type_star)) {
             // argument after **
 
@@ -728,9 +752,17 @@ void mp_call_prepare_args_n_kw_var(bool have_self, size_t n_args_n_kw, const mp_
 
                 mp_map_t *map = mp_obj_dict_get_map(arg);
 
-                // expand output array of args
-                // TODO: don't shrink
-                args2 = m_renew(mp_obj_t, args2, args2_alloc, args2_alloc + 2*map->used - 1);
+                if (!have_star) {
+                    // allocate temporary buffer and copy to it all normal arguments skipped so far
+                    args2 = m_new(mp_obj_t, args2_alloc - 1 + 2*map->used);  // - star + k:v array
+                    // printf("allocate %lu\n", args2_alloc - 1 + 2*map->used);
+                    mp_seq_copy(args2, args, args2_len, mp_obj_t);
+                    have_star = true;
+                } else if (args2_alloc <= args2_len + 2*map->used) {
+                    // expand the temporary buffer
+                    args2 = m_renew(mp_obj_t, args2, args2_alloc, args2_alloc - 1 + 2*map->used);
+                    // printf("expand %lu -> %lu\n", args2_alloc, args2_alloc - 1 + 2*map->used);
+                }
                 args2_alloc += 2*map->used - 1;
 
                 // copy items from dict
@@ -753,20 +785,22 @@ void mp_call_prepare_args_n_kw_var(bool have_self, size_t n_args_n_kw, const mp_
 
                 // get the keys iterable
                 mp_obj_t dest[3];
-                mp_load_method(arg, MP_QSTR_keys, dest);
+                mp_load_method(arg, MP_QSTR_keys, dest);  // TODO: raise if object doesn't have keys() method
                 mp_obj_t iterable = mp_getiter(mp_call_method_n_kw(0, 0, dest), NULL);
 
+                if (!have_star) {
+                    args2 = m_new(mp_obj_t, ++args2_alloc);
+                    mp_seq_copy(args2, args, args2_len, mp_obj_t);
+                    have_star = true;
+                }
+
                 mp_obj_t key;
-                while ((key = mp_iternext(iterable)) != MP_OBJ_STOP_ITERATION) {
+                for (size_t i = 0; (key = mp_iternext(iterable)) != MP_OBJ_STOP_ITERATION; i++) {
                     // expand size of args array if needed
-                    if (args2_len + 1 >= args2_alloc) {
-                        size_t new_alloc = args2_alloc * 2;
-                        if (new_alloc < 4) {
-                            new_alloc = 4;
-                        }
-                        // TODO: don't shrink
-                        args2 = m_renew(mp_obj_t, args2, args2_alloc, new_alloc);
-                        args2_alloc = new_alloc;
+                    if (args2_alloc <= args2_len + 1) {
+                        assert(i>0); // XXX: list should have space at least for the first item
+                        args2 = m_renew(mp_obj_t, args2, args2_alloc, args2_alloc + 4*i);  // add 4, 8, 16, ...
+                        args2_alloc += 4*i;
                     }
 
                     // the key must be a qstr, so intern it if it's a string
@@ -783,30 +817,22 @@ void mp_call_prepare_args_n_kw_var(bool have_self, size_t n_args_n_kw, const mp_
                     args2[args2_len++] = key;
                     args2[args2_len++] = value;
                 }
-            } /* else TODO {
-                mp_raise_TypeError("argument after ** must be a mapping");
-            } */
+            }
         } else {
             // normal keyword argument
 
+            // XXX: if !have_star this is a no-op
             args2[args2_len++] = args[i_args++];
             args2[args2_len++] = args[i_args];
         }
     }
 
-    out_args->fun = fun;
-    out_args->args = args2;
-    out_args->n_args = pos_args_len;
-    out_args->n_kw = args2_len - pos_args_len;
-    out_args->n_alloc = args2_alloc;
-}
-
-mp_obj_t mp_call_method_n_kw_var(bool have_self, size_t n_args_n_kw, const mp_obj_t *args) {
-    mp_call_args_t out_args;
-    mp_call_prepare_args_n_kw_var(have_self, n_args_n_kw, args, &out_args);
-
-    mp_obj_t res = mp_call_function_n_kw(out_args.fun, out_args.n_args, out_args.n_kw, out_args.args);
-    mp_nonlocal_free(out_args.args, out_args.n_alloc * sizeof(mp_obj_t));
+    mp_obj_t res = mp_call_function_n_kw(fun, pos_args_len - adjust, args2_len - pos_args_len, args2 + adjust); // TODO: adjust for self?
+    if (have_star) {
+        m_del(mp_obj_t, args2, args2_alloc);
+    } else {
+        // printf("no allocations!\n");
+    }
 
     return res;
 }

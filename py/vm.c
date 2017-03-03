@@ -900,7 +900,8 @@ unwind_jump:;
                     // unum & 0xff == n_positional
                     // (unum >> 8) & 0xff == n_keyword
                     sp -= (unum & 0xff) + ((unum >> 8) & 0xff);
-                    SET_TOP(mp_call_function_n_kw(*sp, unum & 0xff, (unum >> 8) & 0xff, sp + 1));
+                    // SET_TOP(mp_call_function_n_kw(*sp, unum & 0xff, (unum >> 8) & 0xff, sp + 1));
+                    SET_TOP(mp_call_method_n_kw_var(false, unum, sp));
                     DISPATCH();
                 }
 
@@ -922,7 +923,8 @@ unwind_jump:;
                     // unum & 0xff == n_positional
                     // (unum >> 8) & 0xff == n_keyword
                     sp -= (unum & 0xff) + ((unum >> 8) & 0xff) + 1;
-                    SET_TOP(mp_call_method_n_kw(unum & 0xff, (unum >> 8) & 0xff, sp));
+                    SET_TOP(mp_call_method_n_kw_var(true, unum, sp));
+                    // SET_TOP(mp_call_method_n_kw(unum & 0xff, (unum >> 8) & 0xff, sp));
                     DISPATCH();
                 }
 
