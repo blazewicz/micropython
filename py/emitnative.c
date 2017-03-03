@@ -2501,8 +2501,8 @@ STATIC void emit_native_make_closure(emit_t *emit, scope_t *scope, mp_uint_t n_c
     emit_post_push_reg(emit, VTYPE_PYOBJ, REG_RET);
 }
 
-STATIC void emit_native_call_function(emit_t *emit, mp_uint_t n_positional, mp_uint_t n_keyword, mp_uint_t star_flags) {
-    DEBUG_printf("call_function(n_pos=" UINT_FMT ", n_kw=" UINT_FMT ", star_flags=" UINT_FMT ")\n", n_positional, n_keyword, star_flags);
+STATIC void emit_native_call_function(emit_t *emit, mp_uint_t n_positional, mp_uint_t n_keyword) {
+    DEBUG_printf("call_function(n_pos=" UINT_FMT ", n_kw=" UINT_FMT ")\n", n_positional, n_keyword);
 
     // TODO: in viper mode, call special runtime routine with type info for args,
     // and wanted type info for return, to remove need for boxing/unboxing
@@ -2512,7 +2512,6 @@ STATIC void emit_native_call_function(emit_t *emit, mp_uint_t n_positional, mp_u
     if (vtype_fun == VTYPE_BUILTIN_CAST) {
         // casting operator
         assert(n_positional == 1 && n_keyword == 0);
-        assert(!star_flags);
         DEBUG_printf("  cast to %d\n", vtype_fun);
         vtype_kind_t vtype_cast = peek_stack(emit, 1)->data.u_imm;
         switch (peek_vtype(emit, 0)) {
@@ -2541,19 +2540,17 @@ STATIC void emit_native_call_function(emit_t *emit, mp_uint_t n_positional, mp_u
         }
     } else {
         assert(vtype_fun == VTYPE_PYOBJ);
-        uint op = star_flags ? MP_F_CALL_METHOD_N_KW_VAR : MP_F_CALL_METHOD_N_KW;
         emit_get_stack_pointer_to_reg_for_pop(emit, REG_ARG_3, 1 + n_positional + n_keyword); // pointer to args
-        emit_call_with_2_imm_args(emit, op, 0, REG_ARG_1, n_positional | (n_keyword << 8), REG_ARG_2);
+        emit_call_with_2_imm_args(emit, MP_F_CALL_METHOD_N_KW_VAR, 0, REG_ARG_1, n_positional | (n_keyword << 8), REG_ARG_2);
         emit_post_push_reg(emit, VTYPE_PYOBJ, REG_RET);
     }
 }
 
-STATIC void emit_native_call_method(emit_t *emit, mp_uint_t n_positional, mp_uint_t n_keyword, mp_uint_t star_flags) {
-    DEBUG_printf("call_method(n_pos=" UINT_FMT ", n_kw=" UINT_FMT ", star_flags=" UINT_FMT ")\n", n_positional, n_keyword, star_flags);
-    uint op = star_flags ? MP_F_CALL_METHOD_N_KW_VAR : MP_F_CALL_METHOD_N_KW;
+STATIC void emit_native_call_method(emit_t *emit, mp_uint_t n_positional, mp_uint_t n_keyword) {
+    DEBUG_printf("call_method(n_pos=" UINT_FMT ", n_kw=" UINT_FMT ")\n", n_positional, n_keyword);
     emit_native_pre(emit);
     emit_get_stack_pointer_to_reg_for_pop(emit, REG_ARG_3, 2 + n_positional + n_keyword); // pointer to items, including meth and self
-    emit_call_with_2_imm_args(emit, op, 1, REG_ARG_1, n_positional | (n_keyword << 8), REG_ARG_2);
+    emit_call_with_2_imm_args(emit, MP_F_CALL_METHOD_N_KW_VAR, 1, REG_ARG_1, n_positional | (n_keyword << 8), REG_ARG_2);
     emit_post_push_reg(emit, VTYPE_PYOBJ, REG_RET);
 }
 

@@ -864,23 +864,17 @@ void mp_emit_bc_make_closure(emit_t *emit, scope_t *scope, mp_uint_t n_closed_ov
     }
 }
 
-STATIC void emit_bc_call_function_method_helper(emit_t *emit, mp_int_t stack_adj, mp_uint_t bytecode_base, mp_uint_t n_positional, mp_uint_t n_keyword, mp_uint_t star_flags) {
-    if (star_flags) {
-        // MP_BC_CALL_FUNCTION -> MP_BC_CALL_FUNCTION_VAR_KW
-        // MP_BC_CALL_METHOD -> MP_BC_CALL_METHOD_VAR_KW
-        bytecode_base += 1;
-    }
-
+STATIC void emit_bc_call_function_method_helper(emit_t *emit, mp_int_t stack_adj, mp_uint_t bytecode_base, mp_uint_t n_positional, mp_uint_t n_keyword) {
     emit_bc_pre(emit, stack_adj - (mp_int_t)n_positional - (mp_int_t)n_keyword);
     emit_write_bytecode_byte_uint(emit, bytecode_base, (n_keyword << 8) | n_positional); // TODO make it 2 separate uints?
 }
 
-void mp_emit_bc_call_function(emit_t *emit, mp_uint_t n_positional, mp_uint_t n_keyword, mp_uint_t star_flags) {
-    emit_bc_call_function_method_helper(emit, 0, MP_BC_CALL_FUNCTION, n_positional, n_keyword, star_flags);
+void mp_emit_bc_call_function(emit_t *emit, mp_uint_t n_positional, mp_uint_t n_keyword) {
+    emit_bc_call_function_method_helper(emit, 0, MP_BC_CALL_FUNCTION_VAR_KW, n_positional, n_keyword);
 }
 
-void mp_emit_bc_call_method(emit_t *emit, mp_uint_t n_positional, mp_uint_t n_keyword, mp_uint_t star_flags) {
-    emit_bc_call_function_method_helper(emit, -1, MP_BC_CALL_METHOD, n_positional, n_keyword, star_flags);
+void mp_emit_bc_call_method(emit_t *emit, mp_uint_t n_positional, mp_uint_t n_keyword) {
+    emit_bc_call_function_method_helper(emit, -1, MP_BC_CALL_METHOD_VAR_KW, n_positional, n_keyword);
 }
 
 void mp_emit_bc_return_value(emit_t *emit) {

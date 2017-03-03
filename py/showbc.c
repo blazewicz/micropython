@@ -480,19 +480,9 @@ const byte *mp_bytecode_print_str(const byte *ip) {
             break;
         }
 
-        case MP_BC_CALL_FUNCTION:
-            DECODE_UINT;
-            printf("CALL_FUNCTION n=" UINT_FMT " nkw=" UINT_FMT, unum & 0xff, (unum >> 8) & 0xff);
-            break;
-
         case MP_BC_CALL_FUNCTION_VAR_KW:
             DECODE_UINT;
             printf("CALL_FUNCTION_VAR_KW n=" UINT_FMT " nkw=" UINT_FMT, unum & 0xff, (unum >> 8) & 0xff);
-            break;
-
-        case MP_BC_CALL_METHOD:
-            DECODE_UINT;
-            printf("CALL_METHOD n=" UINT_FMT " nkw=" UINT_FMT, unum & 0xff, (unum >> 8) & 0xff);
             break;
 
         case MP_BC_CALL_METHOD_VAR_KW:
