@@ -2356,10 +2356,8 @@ STATIC void compile_trailer_paren_helper(compiler_t *comp, mp_parse_node_t pn_ar
         if (MP_PARSE_NODE_IS_STRUCT(args[i])) {
             mp_parse_node_struct_t *pns_arg = (mp_parse_node_struct_t*)args[i];
             if (MP_PARSE_NODE_STRUCT_KIND(pns_arg) == PN_arglist_star) {
-                if (n_keyword > 0) {
-                    compile_syntax_error(comp, args[i], "non-keyword arg after keyword arg");
-                    return;
-                }
+                // TODO: *x are not allowed after **x
+                //       but are perfectly allowed after keyword args (WTF?! why?!)
                 compile_node(comp, pns_arg->nodes[0]);
                 EMIT(build_star);
                 n_positional++;
