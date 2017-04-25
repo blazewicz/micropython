@@ -2465,7 +2465,7 @@ STATIC void compile_atom_paren(compiler_t *comp, mp_parse_node_struct_t *pns) {
 STATIC size_t compile_sequence_item(compiler_t *comp, mp_parse_node_t pn) {
     if (MP_PARSE_NODE_IS_STRUCT(pn)) {
         mp_parse_node_struct_t *pns = (mp_parse_node_struct_t*)pn;
-        if (MP_PARSE_NODE_STRUCT_KIND(pns) == PN_testslist_comp_star) {
+        if (MP_PARSE_NODE_STRUCT_KIND(pns) == PN_star_expr) {
             // TODO: maybe add optimization for explicit lists and tuples
             //       this would add some code size, but also remove lot of
             //       overhead from produced bytecode and from runtime
