@@ -777,7 +777,9 @@ unwind_jump:;
                     MARK_EXC_IP_SELECTIVE();
                     DECODE_UINT;
                     sp -= unum - 1;
-                    SET_TOP(mp_obj_new_tuple(unum, sp));
+                    mp_obj_t *items;
+                    size_t len = mp_expand_sequence(&items, sp, unum);
+                    SET_TOP(mp_obj_new_tuple(len, items));
                     DISPATCH();
                 }
 
@@ -785,7 +787,9 @@ unwind_jump:;
                     MARK_EXC_IP_SELECTIVE();
                     DECODE_UINT;
                     sp -= unum - 1;
-                    SET_TOP(mp_obj_new_list(unum, sp));
+                    mp_obj_t *items;
+                    size_t len = mp_expand_sequence(&items, sp, unum);
+                    SET_TOP(mp_obj_new_list(len, items));
                     DISPATCH();
                 }
 

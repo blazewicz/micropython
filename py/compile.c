@@ -2462,7 +2462,52 @@ STATIC void compile_atom_paren(compiler_t *comp, mp_parse_node_struct_t *pns) {
     }
 }
 
+STATIC size_t compile_sequence_item(compiler_t *comp, mp_parse_node_t pn) {
+    if (MP_PARSE_NODE_IS_STRUCT(pn)) {
+        mp_parse_node_struct_t *pns = (mp_parse_node_struct_t*)pn;
+        if (MP_PARSE_NODE_STRUCT_KIND(pns) == PN_testslist_comp_star) {
+            // TODO: maybe add optimization for explicit lists and tuples
+            //       this would add some code size, but also remove lot of
+            //       overhead from produced bytecode and from runtime
+            // for exmaple "[1,*[2,3]]" now emits:
+            //     MP_BC_LOAD_CONST_SMALL_INT 1
+            //     MP_BC_LOAD_CONST_SMALL_INT 2
+            //     MP_BC_LOAD_CONST_SMALL_INT 3
+            //     MP_BC_BUILD_LIST 2
+            //     MP_BC_BUILD_STAR
+            //     MP_BC_BUILD_LIST 2
+            //     # runtime must unpack star expression and then put it into the final list
+            // but we could optimize compiler to emit the final list directly:
+            //     MP_BC_LOAD_CONST_SMALL_INT 1
+            //     MP_BC_LOAD_CONST_SMALL_INT 2
+            //     MP_BC_LOAD_CONST_SMALL_INT 3
+            //     MP_BC_BUILD_LIST 3
+            //     # runtime generates the final list
+            compile_node(comp, pns->nodes[0]);
+            EMIT(build_star);
+            return 1;
+        }
+    }
+    compile_node(comp, pn);
+    return 1;
+}
+
+STATIC size_t compile_sequence_items(compiler_t *comp, mp_parse_node_struct_t *pns) {
+    size_t len = 0;
+    int num_nodes = MP_PARSE_NODE_STRUCT_NUM_NODES(pns);
+    for (int i = 0; i < num_nodes; i++) {
+        len += compile_sequence_item(comp, pns->nodes[i]);
+        if (comp->compile_error != MP_OBJ_NULL) {
+            // add line info for the error in case it didn't have a line number
+            compile_error_set_line(comp, pns->nodes[i]);
+            return 0;
+        }
+    }
+    return len;
+}
+
 STATIC void compile_atom_bracket(compiler_t *comp, mp_parse_node_struct_t *pns) {
+    size_t len = 0;
     if (MP_PARSE_NODE_IS_NULL(pns->nodes[0])) {
         // empty list
         EMIT_ARG(build, 0, MP_EMIT_BUILD_LIST);
@@ -2473,13 +2518,13 @@ STATIC void compile_atom_bracket(compiler_t *comp, mp_parse_node_struct_t *pns) 
             if (MP_PARSE_NODE_STRUCT_KIND(pns3) == PN_testlist_comp_3b) {
                 // list of one item, with trailing comma
                 assert(MP_PARSE_NODE_IS_NULL(pns3->nodes[0]));
-                compile_node(comp, pns2->nodes[0]);
-                EMIT_ARG(build, 1, MP_EMIT_BUILD_LIST);
+                len = compile_sequence_item(comp, pns2->nodes[0]);
+                EMIT_ARG(build, len, MP_EMIT_BUILD_LIST);
             } else if (MP_PARSE_NODE_STRUCT_KIND(pns3) == PN_testlist_comp_3c) {
                 // list of many items
-                compile_node(comp, pns2->nodes[0]);
-                compile_generic_all_nodes(comp, pns3);
-                EMIT_ARG(build, 1 + MP_PARSE_NODE_STRUCT_NUM_NODES(pns3), MP_EMIT_BUILD_LIST);
+                len = compile_sequence_item(comp, pns2->nodes[0]);
+                len += compile_sequence_items(comp, pns3);
+                EMIT_ARG(build, len, MP_EMIT_BUILD_LIST);
             } else if (MP_PARSE_NODE_STRUCT_KIND(pns3) == PN_comp_for) {
                 // list comprehension
                 compile_comprehension(comp, pns2, SCOPE_LIST_COMP);
@@ -2490,14 +2535,14 @@ STATIC void compile_atom_bracket(compiler_t *comp, mp_parse_node_struct_t *pns) 
         } else {
             // list with 2 items
             list_with_2_items:
-            compile_node(comp, pns2->nodes[0]);
-            compile_node(comp, pns2->nodes[1]);
-            EMIT_ARG(build, 2, MP_EMIT_BUILD_LIST);
+            len = compile_sequence_item(comp, pns2->nodes[0]);
+            len += compile_sequence_item(comp, pns2->nodes[1]);
+            EMIT_ARG(build, len, MP_EMIT_BUILD_LIST);
         }
     } else {
         // list with 1 item
-        compile_node(comp, pns->nodes[0]);
-        EMIT_ARG(build, 1, MP_EMIT_BUILD_LIST);
+        len = compile_sequence_item(comp, pns->nodes[0]);
+        EMIT_ARG(build, len, MP_EMIT_BUILD_LIST);
     }
 }
 

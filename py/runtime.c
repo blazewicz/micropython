@@ -595,6 +595,46 @@ zero_division:
     mp_raise_msg(&mp_type_ZeroDivisionError, "divide by zero");
 }
 
+size_t mp_expand_sequence(mp_obj_t **items, mp_obj_t *args, size_t n_args) {
+    *items = args;
+    size_t items_alloc = n_args;
+    size_t items_len = n_args;
+
+    for (size_t i = 0; i < n_args; i++) {
+        if (MP_OBJ_IS_TYPE(args[i], &mp_type_star)) {
+            mp_obj_t arg = mp_obj_star_get(args[i]);
+            if (MP_OBJ_IS_TYPE(arg, &mp_type_tuple) || MP_OBJ_IS_TYPE(arg, &mp_type_list)) {
+                // optimise the case of a tuple and list
+
+                // get the items
+                mp_uint_t seq_len;
+                mp_obj_t *seq_items;
+                mp_obj_get_array(arg, &seq_len, &seq_items);
+
+                if (*items == args) {
+                    // allocate temporary buffer and copy to it all normal arguments skipped so far
+                    *items = m_new(mp_obj_t, items_alloc - 1 + seq_len);  // - star + array
+                    mp_seq_copy(*items, args, n_args, mp_obj_t);
+                } else if (items_alloc < items_len + seq_len) {
+                    // expand the temporary buffer
+                    *items = m_renew(mp_obj_t, *items, items_alloc, items_alloc - 1 + seq_len);
+                }
+                items_alloc += seq_len - 1;
+
+                // copy elements from the array
+                mp_seq_copy(*items + items_len - 1, seq_items, seq_len, mp_obj_t);
+                items_len += seq_len - 1;
+            } else {
+                mp_raise_msg(&mp_type_NotImplementedError, "generalized unpacking not implemented");
+            }
+        } else if (*items != args) {
+            **items++ = *args++;
+        }
+    }
+
+    return items_len;
+}
+
 mp_obj_t mp_call_function_0(mp_obj_t fun) {
     return mp_call_function_n_kw(fun, 0, 0, NULL);
 }
