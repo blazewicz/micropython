@@ -595,14 +595,14 @@ zero_division:
     mp_raise_msg(&mp_type_ZeroDivisionError, "divide by zero");
 }
 
-size_t mp_expand_sequence(mp_obj_t **items, mp_obj_t *args, size_t n_args) {
-    *items = args;
+size_t mp_expand_sequence(mp_obj_t **items, const mp_obj_t *args, size_t n_args) {
+    *items = (mp_obj_t*)args;
     size_t items_alloc = n_args;
     size_t items_len = n_args;
 
-    for (size_t i = 0; i < n_args; i++) {
-        if (MP_OBJ_IS_TYPE(args[i], &mp_type_star)) {
-            mp_obj_t arg = mp_obj_star_get(args[i]);
+    for (size_t i_args = 0; i_args < n_args; i_args++) {
+        if (MP_OBJ_IS_TYPE(args[i_args], &mp_type_star)) {
+            mp_obj_t arg = mp_obj_star_get(args[i_args]);
             if (MP_OBJ_IS_TYPE(arg, &mp_type_tuple) || MP_OBJ_IS_TYPE(arg, &mp_type_list)) {
                 // optimise the case of a tuple and list
 
@@ -611,24 +611,59 @@ size_t mp_expand_sequence(mp_obj_t **items, mp_obj_t *args, size_t n_args) {
                 mp_obj_t *seq_items;
                 mp_obj_get_array(arg, &seq_len, &seq_items);
 
+                size_t new_alloc = items_alloc + seq_len - 1;
                 if (*items == args) {
                     // allocate temporary buffer and copy to it all normal arguments skipped so far
-                    *items = m_new(mp_obj_t, items_alloc - 1 + seq_len);  // - star + array
-                    mp_seq_copy(*items, args, n_args, mp_obj_t);
+                    *items = m_new(mp_obj_t, new_alloc);  // - star + array
+                    items_len = i_args;
+                    // printf("(seq) alloc %lu\n", new_alloc);
+                    if (i_args > 0) {
+                        mp_seq_copy(*items, args, i_args, mp_obj_t);
+                    }
                 } else if (items_alloc < items_len + seq_len) {
                     // expand the temporary buffer
-                    *items = m_renew(mp_obj_t, *items, items_alloc, items_alloc - 1 + seq_len);
+                    *items = m_renew(mp_obj_t, *items, items_alloc, new_alloc);
+                    // printf("(seq) realloc %lu\n", new_alloc);
                 }
-                items_alloc += seq_len - 1;
+                items_alloc = new_alloc;
 
                 // copy elements from the array
-                mp_seq_copy(*items + items_len - 1, seq_items, seq_len, mp_obj_t);
-                items_len += seq_len - 1;
+                mp_seq_copy(*items + items_len, seq_items, seq_len, mp_obj_t);
+                // printf("(seq) put %lu-%lu of %lu\n", items_len, items_len + seq_len - 1, items_alloc);
+                items_len += seq_len;
             } else {
-                mp_raise_msg(&mp_type_NotImplementedError, "generalized unpacking not implemented");
+                // generic iterator
+
+                // first, check if what we got is actually an iterator
+                mp_obj_iter_buf_t iter_buf;
+                mp_obj_t iterable = mp_getiter(arg, &iter_buf);  // can raise TypError
+
+                if (*items == args) {
+                    *items = m_new(mp_obj_t, items_alloc);  // first element will take place of the star
+                    items_len = i_args;
+                    // printf("(iter) alloc %lu\n", items_alloc);
+                    if (i_args > 0) {
+                        mp_seq_copy(*items, args, i_args, mp_obj_t);
+                    }
+                }
+
+                // extract the variable position args from the iterator
+                mp_obj_t item;
+                for (size_t i = 1; (item = mp_iternext(iterable)) != MP_OBJ_STOP_ITERATION;) {
+                    if (items_len >= items_alloc) {
+                        size_t new_alloc = items_alloc + 2*i;  // add 2, 4, 8, ...
+                        *items = m_renew(mp_obj_t, *items, items_alloc, new_alloc);
+                        items_alloc = new_alloc;
+                        // printf("(iter) realloc %lu\n", items_alloc);
+                        i++;
+                    }
+                    // printf("(iter) put %lu of %lu\n", items_len, items_alloc);
+                    (*items)[items_len++] = item;
+                }
             }
         } else if (*items != args) {
-            **items++ = *args++;
+            // printf("(pos) put %lu of %lu\n", items_len, items_alloc);
+            (*items)[items_len++] = args[i_args];
         }
     }
 
@@ -713,70 +748,9 @@ mp_obj_t mp_call_method_n_kw_var(bool have_self, size_t n_args_n_kw, const mp_ob
         args2_len++;
     }
 
-    // iterate over positional args
-    for (; i_args < n_args; i_args++) {
-        if (MP_OBJ_IS_TYPE(args[i_args], &mp_type_star)) {
-            // argument after *
-
-            mp_obj_t arg = mp_obj_star_get(args[i_args]);
-            if (MP_OBJ_IS_TYPE(arg, &mp_type_tuple) || MP_OBJ_IS_TYPE(arg, &mp_type_list)) {
-                // optimise the case of a tuple and list
-
-                // get the items
-                mp_uint_t len;
-                mp_obj_t *items;
-                mp_obj_get_array(arg, &len, &items);
-
-                if (!have_star) {
-                    // allocate temporary buffer and copy to it all normal arguments skipped so far
-                    args2 = m_new(mp_obj_t, args2_alloc - 1 + len);  // - star + array
-                    // printf("allocate %lu\n", args2_alloc - 1 + len);
-                    mp_seq_copy(args2, args, args2_len, mp_obj_t);
-                    have_star = true;
-                } else if (args2_alloc < args2_len + len) {
-                    // expand the temporary buffer
-                    args2 = m_renew(mp_obj_t, args2, args2_alloc, args2_alloc - 1 + len);
-                    // printf("expand %lu -> %lu\n", args2_alloc, args2_alloc - 1 + len);
-                }
-                args2_alloc += len - 1;
-
-                // copy elements from the array
-                mp_seq_copy(args2 + args2_len, items, len, mp_obj_t);
-                args2_len += len;
-            } else /* if is iter TODO */ {
-                // generic iterator
-
-                // first, check if what we got is actually an iterator
-                mp_obj_iter_buf_t iter_buf;
-                mp_obj_t iterable = mp_getiter(arg, &iter_buf);  // can raise TypError
-
-                if (!have_star) {
-                    args2 = m_new(mp_obj_t, args2_alloc);  // first element will take place of the star
-                    // printf("allocate %lu\n", args2_alloc);
-                    mp_seq_copy(args2, args, args2_len, mp_obj_t);
-                    have_star = true;
-                }
-
-                // extract the variable position args from the iterator
-                mp_obj_t item;
-                for (size_t i = 1; (item = mp_iternext(iterable)) != MP_OBJ_STOP_ITERATION;) {
-                    if (args2_len >= args2_alloc) {
-                        assert(i > 0); // XXX: list should have space at least for the first element
-                        args2 = m_renew(mp_obj_t, args2, args2_alloc, args2_alloc + 2*i);  // add 2, 4, 8, ...
-                        // printf("expand %lu -> %lu\n", args2_alloc, args2_alloc + 2*i);
-                        args2_alloc += 2*i;
-                        i++;
-                    }
-                    args2[args2_len++] = item;
-                }
-            }
-        } else {
-            // normal positional argument
-
-            // XXX: if !have_star this is a no-op
-            args2[args2_len++] = args[i_args];
-        }
-    }
+    size_t pos = mp_expand_sequence(&args2, args+i_args, n_args-i_args);
+    i_args += pos;  // XXX
+    args2_len += pos;
 
     // The size of the args2 array now is the number of positional args.
     size_t pos_args_len = args2_len;

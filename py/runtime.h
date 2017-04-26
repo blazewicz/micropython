@@ -102,7 +102,7 @@ void mp_delete_global(qstr qst);
 mp_obj_t mp_unary_op(mp_unary_op_t op, mp_obj_t arg);
 mp_obj_t mp_binary_op(mp_binary_op_t op, mp_obj_t lhs, mp_obj_t rhs);
 
-size_t mp_expand_sequence(mp_obj_t **items, mp_obj_t *items_in, size_t items_in_cnt);
+size_t mp_expand_sequence(mp_obj_t **items, const mp_obj_t *items_in, size_t items_in_cnt);
 
 mp_obj_t mp_call_function_0(mp_obj_t fun);
 mp_obj_t mp_call_function_1(mp_obj_t fun, mp_obj_t arg);
