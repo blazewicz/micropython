@@ -611,25 +611,20 @@ size_t mp_expand_sequence(mp_obj_t **items, const mp_obj_t *args, size_t n_args)
                 mp_obj_t *seq_items;
                 mp_obj_get_array(arg, &seq_len, &seq_items);
 
-                size_t new_alloc = items_alloc + seq_len - 1;
+                size_t new_alloc = items_alloc - 1 + seq_len;  // remove star and append sequence
                 if (*items == args) {
-                    // allocate temporary buffer and copy to it all normal arguments skipped so far
-                    *items = m_new(mp_obj_t, new_alloc);  // - star + array
+                    *items = m_new(mp_obj_t, new_alloc);
                     items_len = i_args;
-                    // printf("(seq) alloc %lu\n", new_alloc);
                     if (i_args > 0) {
                         mp_seq_copy(*items, args, i_args, mp_obj_t);
                     }
-                } else if (items_alloc < items_len + seq_len) {
-                    // expand the temporary buffer
+                } else if (items_alloc < new_alloc) {
                     *items = m_renew(mp_obj_t, *items, items_alloc, new_alloc);
-                    // printf("(seq) realloc %lu\n", new_alloc);
                 }
                 items_alloc = new_alloc;
 
                 // copy elements from the array
                 mp_seq_copy(*items + items_len, seq_items, seq_len, mp_obj_t);
-                // printf("(seq) put %lu-%lu of %lu\n", items_len, items_len + seq_len - 1, items_alloc);
                 items_len += seq_len;
             } else {
                 // generic iterator
@@ -639,9 +634,8 @@ size_t mp_expand_sequence(mp_obj_t **items, const mp_obj_t *args, size_t n_args)
                 mp_obj_t iterable = mp_getiter(arg, &iter_buf);  // can raise TypError
 
                 if (*items == args) {
-                    *items = m_new(mp_obj_t, items_alloc);  // first element will take place of the star
+                    *items = m_new(mp_obj_t, items_alloc);
                     items_len = i_args;
-                    // printf("(iter) alloc %lu\n", items_alloc);
                     if (i_args > 0) {
                         mp_seq_copy(*items, args, i_args, mp_obj_t);
                     }
@@ -654,19 +648,17 @@ size_t mp_expand_sequence(mp_obj_t **items, const mp_obj_t *args, size_t n_args)
                         size_t new_alloc = items_alloc + 2*i;  // add 2, 4, 8, ...
                         *items = m_renew(mp_obj_t, *items, items_alloc, new_alloc);
                         items_alloc = new_alloc;
-                        // printf("(iter) realloc %lu\n", items_alloc);
                         i++;
                     }
-                    // printf("(iter) put %lu of %lu\n", items_len, items_alloc);
                     (*items)[items_len++] = item;
                 }
             }
         } else if (*items != args) {
-            // printf("(pos) put %lu of %lu\n", items_len, items_alloc);
             (*items)[items_len++] = args[i_args];
         }
     }
 
+    // FIXME: we loose information about items_alloc, shrink to fit?
     return items_len;
 }
 
