@@ -2363,7 +2363,7 @@ STATIC void compile_atom_paren_bracket(compiler_t *comp, mp_parse_node_struct_t 
     size_t len;
 
     if (MP_PARSE_NODE_IS_NULL(pns->nodes[0])) {
-        // an empty tuple
+        // empty sequence
         len = 0;
     } else if (MP_PARSE_NODE_IS_STRUCT_KIND(pns->nodes[0], PN_testlist_comp)) {
         pns = (mp_parse_node_struct_t*)pns->nodes[0];
@@ -2371,26 +2371,26 @@ STATIC void compile_atom_paren_bracket(compiler_t *comp, mp_parse_node_struct_t 
         if (MP_PARSE_NODE_IS_STRUCT(pns->nodes[1])) {
             mp_parse_node_struct_t *pns2 = (mp_parse_node_struct_t*)pns->nodes[1];
             if (MP_PARSE_NODE_STRUCT_KIND(pns2) == PN_testlist_comp_3b) {
-                // tuple of one item, with trailing comma
+                // sequence of one item
                 assert(MP_PARSE_NODE_IS_NULL(pns2->nodes[0]));
                 compile_node(comp, pns->nodes[0]);
                 len = 1;
             } else if (MP_PARSE_NODE_STRUCT_KIND(pns2) == PN_testlist_comp_3c) {
-                // tuple of many items
+                // sequence of many items
                 compile_node(comp, pns->nodes[0]);
                 compile_generic_all_nodes(comp, pns2);
                 len = 1 + MP_PARSE_NODE_STRUCT_NUM_NODES(pns2);
             } else if (MP_PARSE_NODE_STRUCT_KIND(pns2) == PN_comp_for) {
-                // generator expression
+                // generator expression / list comprehension
                 compile_comprehension(comp, pns, is_tuple ? SCOPE_GEN_EXPR : SCOPE_LIST_COMP);
                 return;
             } else {
-                // tuple with 2 items
-                goto tuple_with_2_items;
+                // sequence with 2 items
+                goto sequence_with_2_items;
             }
         } else {
-            // tuple with 2 items
-            tuple_with_2_items:
+            // sequence with 2 items
+            sequence_with_2_items:
             compile_node(comp, pns->nodes[0]);
             compile_node(comp, pns->nodes[1]);
             len = 2;
