@@ -2366,12 +2366,14 @@ STATIC void compile_comprehension(compiler_t *comp, mp_parse_node_struct_t *pns,
     EMIT_ARG(call_function, 1, 0, 0);
 }
 
-STATIC void compile_atom_paren(compiler_t *comp, mp_parse_node_struct_t *pns) {
+STATIC void compile_atom_paren_bracket(compiler_t *comp, mp_parse_node_struct_t *pns) {
+    bool is_tuple = MP_PARSE_NODE_STRUCT_KIND(pns) == PN_atom_paren;
+    size_t len;
+
     if (MP_PARSE_NODE_IS_NULL(pns->nodes[0])) {
         // an empty tuple
-        EMIT_ARG(build_tuple, 0);
-    } else {
-        assert(MP_PARSE_NODE_IS_STRUCT_KIND(pns->nodes[0], PN_testlist_comp));
+        len = 0;
+    } else if (MP_PARSE_NODE_IS_STRUCT_KIND(pns->nodes[0], PN_testlist_comp)) {
         pns = (mp_parse_node_struct_t*)pns->nodes[0];
         assert(!MP_PARSE_NODE_IS_NULL(pns->nodes[1]));
         if (MP_PARSE_NODE_IS_STRUCT(pns->nodes[1])) {
@@ -2379,13 +2381,17 @@ STATIC void compile_atom_paren(compiler_t *comp, mp_parse_node_struct_t *pns) {
             if (MP_PARSE_NODE_STRUCT_KIND(pns2) == PN_testlist_comp_3b) {
                 // tuple of one item, with trailing comma
                 assert(MP_PARSE_NODE_IS_NULL(pns2->nodes[0]));
-                c_tuple(comp, pns->nodes[0], NULL);
+                compile_node(comp, pns->nodes[0]);
+                len = 1;
             } else if (MP_PARSE_NODE_STRUCT_KIND(pns2) == PN_testlist_comp_3c) {
                 // tuple of many items
-                c_tuple(comp, pns->nodes[0], pns2);
+                compile_node(comp, pns->nodes[0]);
+                compile_generic_all_nodes(comp, pns2);
+                len = 1 + MP_PARSE_NODE_STRUCT_NUM_NODES(pns2);
             } else if (MP_PARSE_NODE_STRUCT_KIND(pns2) == PN_comp_for) {
                 // generator expression
-                compile_comprehension(comp, pns, SCOPE_GEN_EXPR);
+                compile_comprehension(comp, pns, is_tuple ? SCOPE_GEN_EXPR : SCOPE_LIST_COMP);
+                return;
             } else {
                 // tuple with 2 items
                 goto tuple_with_2_items;
@@ -2393,47 +2399,21 @@ STATIC void compile_atom_paren(compiler_t *comp, mp_parse_node_struct_t *pns) {
         } else {
             // tuple with 2 items
             tuple_with_2_items:
-            c_tuple(comp, MP_PARSE_NODE_NULL, pns);
-        }
-    }
-}
-
-STATIC void compile_atom_bracket(compiler_t *comp, mp_parse_node_struct_t *pns) {
-    if (MP_PARSE_NODE_IS_NULL(pns->nodes[0])) {
-        // empty list
-        EMIT_ARG(build_list, 0);
-    } else if (MP_PARSE_NODE_IS_STRUCT_KIND(pns->nodes[0], PN_testlist_comp)) {
-        pns = (mp_parse_node_struct_t*)pns->nodes[0];
-        if (MP_PARSE_NODE_IS_STRUCT(pns->nodes[1])) {
-            mp_parse_node_struct_t *pns2 = (mp_parse_node_struct_t*)pns->nodes[1];
-            if (MP_PARSE_NODE_STRUCT_KIND(pns2) == PN_testlist_comp_3b) {
-                // list of one item, with trailing comma
-                assert(MP_PARSE_NODE_IS_NULL(pns2->nodes[0]));
-                compile_node(comp, pns->nodes[0]);
-                EMIT_ARG(build_list, 1);
-            } else if (MP_PARSE_NODE_STRUCT_KIND(pns2) == PN_testlist_comp_3c) {
-                // list of many items
-                compile_node(comp, pns->nodes[0]);
-                compile_generic_all_nodes(comp, pns2);
-                EMIT_ARG(build_list, 1 + MP_PARSE_NODE_STRUCT_NUM_NODES(pns2));
-            } else if (MP_PARSE_NODE_STRUCT_KIND(pns2) == PN_comp_for) {
-                // list comprehension
-                compile_comprehension(comp, pns, SCOPE_LIST_COMP);
-            } else {
-                // list with 2 items
-                goto list_with_2_items;
-            }
-        } else {
-            // list with 2 items
-            list_with_2_items:
             compile_node(comp, pns->nodes[0]);
             compile_node(comp, pns->nodes[1]);
-            EMIT_ARG(build_list, 2);
+            len = 2;
         }
     } else {
         // list with 1 item
+        assert(!is_tuple);
         compile_node(comp, pns->nodes[0]);
-        EMIT_ARG(build_list, 1);
+        len = 1;
+    }
+
+    if (is_tuple) {
+        EMIT_ARG(build_tuple, len);
+    } else {
+        EMIT_ARG(build_list, len);
     }
 }
 
