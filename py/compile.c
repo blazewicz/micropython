@@ -260,25 +260,17 @@ STATIC void compile_delete_id(compiler_t *comp, qstr qst) {
     }
 }
 
-STATIC void c_tuple(compiler_t *comp, mp_parse_node_t pn, mp_parse_node_struct_t *pns_list) {
-    int total = 0;
-    if (!MP_PARSE_NODE_IS_NULL(pn)) {
-        compile_node(comp, pn);
-        total += 1;
-    }
-    if (pns_list != NULL) {
-        int n = MP_PARSE_NODE_STRUCT_NUM_NODES(pns_list);
+STATIC void compile_generic_tuple(compiler_t *comp, mp_parse_node_struct_t *pns) {
+    // a simple tuple expression
+    size_t total = 0;
+    if (pns != NULL) {
+        int n = MP_PARSE_NODE_STRUCT_NUM_NODES(pns);
         for (int i = 0; i < n; i++) {
-            compile_node(comp, pns_list->nodes[i]);
+            compile_node(comp, pns->nodes[i]);
         }
         total += n;
     }
     EMIT_ARG(build_tuple, total);
-}
-
-STATIC void compile_generic_tuple(compiler_t *comp, mp_parse_node_struct_t *pns) {
-    // a simple tuple expression
-    c_tuple(comp, MP_PARSE_NODE_NULL, pns);
 }
 
 STATIC void c_if_cond(compiler_t *comp, mp_parse_node_t pn, bool jump_if, int label) {
