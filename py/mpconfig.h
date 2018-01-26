@@ -373,6 +373,11 @@
 #define MICROPY_DEBUG_PRINTERS (0)
 #endif
 
+// Whether to print parse node structure
+#ifndef MICROPY_PRINT_PARSE_NODES
+#define MICROPY_PRINT_PARSE_NODES (0)
+#endif
+
 // Whether to enable all debugging outputs (it will be extremely verbose)
 #ifndef MICROPY_DEBUG_VERBOSE
 #define MICROPY_DEBUG_VERBOSE (0)

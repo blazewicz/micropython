@@ -55,8 +55,10 @@
 #define RULE_ARG_RULE           (0x2000)
 #define RULE_ARG_OPT_RULE       (0x3000)
 
+#if MICROPY_PRINT_PARSE_NODES
 // (un)comment to use rule names; for debugging
 //#define USE_RULE_NAME (1)
+#endif
 
 enum {
 // define rules with a compile function
