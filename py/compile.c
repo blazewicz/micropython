@@ -212,16 +212,27 @@ STATIC void apply_to_single_or_list(compiler_t *comp, mp_parse_node_t pn, pn_kin
     }
 }
 
-STATIC void compile_generic_all_nodes(compiler_t *comp, mp_parse_node_struct_t *pns) {
-    int num_nodes = MP_PARSE_NODE_STRUCT_NUM_NODES(pns);
+STATIC size_t c_generic_all_nodes(compiler_t *comp, mp_parse_node_struct_t *pns) {
+    assert(pns != NULL);
+    size_t num_nodes = MP_PARSE_NODE_STRUCT_NUM_NODES(pns);
     for (int i = 0; i < num_nodes; i++) {
         compile_node(comp, pns->nodes[i]);
         if (comp->compile_error != MP_OBJ_NULL) {
             // add line info for the error in case it didn't have a line number
             compile_error_set_line(comp, pns->nodes[i]);
-            return;
+            return 0;
         }
     }
+    return num_nodes;
+}
+
+STATIC void compile_generic_all_nodes(compiler_t *comp, mp_parse_node_struct_t *pns) {
+    c_generic_all_nodes(comp, pns);
+}
+
+STATIC void compile_generic_tuple(compiler_t *comp, mp_parse_node_struct_t *pns) {
+    size_t total = c_generic_all_nodes(comp, pns);
+    EMIT_ARG(build_tuple, total);
 }
 
 STATIC void compile_load_id(compiler_t *comp, qstr qst) {
@@ -258,19 +269,6 @@ STATIC void compile_delete_id(compiler_t *comp, qstr qst) {
         mp_emit_common_id_op(comp->emit, &mp_emit_bc_method_table_delete_id_ops, comp->scope_cur, qst);
         #endif
     }
-}
-
-STATIC void compile_generic_tuple(compiler_t *comp, mp_parse_node_struct_t *pns) {
-    // a simple tuple expression
-    size_t total = 0;
-    if (pns != NULL) {
-        int n = MP_PARSE_NODE_STRUCT_NUM_NODES(pns);
-        for (int i = 0; i < n; i++) {
-            compile_node(comp, pns->nodes[i]);
-        }
-        total += n;
-    }
-    EMIT_ARG(build_tuple, total);
 }
 
 STATIC void c_if_cond(compiler_t *comp, mp_parse_node_t pn, bool jump_if, int label) {
