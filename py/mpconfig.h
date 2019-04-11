@@ -1121,6 +1121,15 @@ typedef double mp_float_t;
 #define MICROPY_PY_IO_BUFFEREDWRITER (0)
 #endif
 
+// Whether to provide "dis" module
+#ifndef MICROPY_PY_DIS
+#define MICROPY_PY_DIS (0)
+#endif
+
+#if MICROPY_PY_DIS && !MICROPY_DEBUG_PRINTERS
+#error MICROPY_PY_DIS requires MICROPY_DEBUG_PRINTERS
+#endif
+
 // Whether to provide "struct" module
 #ifndef MICROPY_PY_STRUCT
 #define MICROPY_PY_STRUCT (1)

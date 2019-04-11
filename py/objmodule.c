@@ -156,6 +156,9 @@ STATIC const mp_rom_map_elem_t mp_builtin_module_table[] = {
     { MP_ROM_QSTR(MP_QSTR_cmath), MP_ROM_PTR(&mp_module_cmath) },
 #endif
 #endif
+#if MICROPY_PY_DIS
+    { MP_ROM_QSTR(MP_QSTR_dis), MP_ROM_PTR(&mp_module_dis) },
+#endif
 #if MICROPY_PY_SYS
     { MP_ROM_QSTR(MP_QSTR_sys), MP_ROM_PTR(&mp_module_sys) },
 #endif

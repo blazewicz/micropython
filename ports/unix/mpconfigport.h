@@ -104,6 +104,7 @@
 #define MICROPY_PY_MATH_SPECIAL_FUNCTIONS (1)
 #endif
 #define MICROPY_PY_CMATH            (1)
+#define MICROPY_PY_DIS              (1)
 #define MICROPY_PY_IO_IOBASE        (1)
 #define MICROPY_PY_IO_FILEIO        (1)
 #define MICROPY_PY_GC_COLLECT_RETVAL (1)

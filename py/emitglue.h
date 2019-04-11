@@ -59,8 +59,8 @@ typedef struct _mp_raw_code_t {
     mp_uint_t n_pos_args : 11;
     const void *fun_data;
     const mp_uint_t *const_table;
-    #if MICROPY_PERSISTENT_CODE_SAVE
     size_t fun_data_len;
+    #if MICROPY_PERSISTENT_CODE_SAVE
     uint16_t n_obj;
     uint16_t n_raw_code;
     #if MICROPY_EMIT_NATIVE || MICROPY_EMIT_INLINE_ASM

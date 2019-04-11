@@ -69,8 +69,8 @@ void mp_emit_glue_assign_bytecode(mp_raw_code_t *rc, const byte *code,
     rc->scope_flags = scope_flags;
     rc->fun_data = code;
     rc->const_table = const_table;
-    #if MICROPY_PERSISTENT_CODE_SAVE
     rc->fun_data_len = len;
+    #if MICROPY_PERSISTENT_CODE_SAVE
     rc->n_obj = n_obj;
     rc->n_raw_code = n_raw_code;
     #endif
